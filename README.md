@@ -12,14 +12,14 @@ First, make sure that the Docker daemon is running.
 Then, to build the application, run the following command in the command line (or use the Maven integration of your IDE):
 
 ```shell
-mvn clean install
+mise exec -- mvn clean install
 ```
 **Note:** In the `dev` profile, all repositories are cleared before startup, the initial data is loaded (see [`LoadInitialData.java`](application/src/main/java/de/seuhd/campuscoffee/LoadInitialData.java)).
 
 You can use the quiet mode to suppress most log messages:
 
 ```shell
-mvn clean install -q
+ mise exec -- mvn clean install -q
 ```
 
 ## Start application (dev)
@@ -35,7 +35,7 @@ Then, you can start the application:
 
 ```shell
 cd application
-mvn spring-boot:run -Dspring-boot.run.profiles=dev
+mise exec -- mvn spring-boot:run "-Dspring-boot.run.profiles=dev"
 ```
 **Note:** The data source is configured via the [`application.yaml`](application/src/main/resources/application.yaml) file.
 
@@ -49,11 +49,11 @@ You can use `curl` in the command line to send HTTP requests to the REST API.
 
 All POS:
 ```shell
-curl http://localhost:8080/api/pos
+curl.exe http://localhost:8080/api/pos
 ```
 POS by ID:
 ```shell
-curl http://localhost:8080/api/pos/1 # add valid POS id here
+curl.exe http://localhost:8080/api/pos/1 # add valid POS id here
 ```
 
 #### Create POS
@@ -61,18 +61,18 @@ curl http://localhost:8080/api/pos/1 # add valid POS id here
 Create a POS based on a JSON object provided in the request body:
 
 ```shell
-curl --header "Content-Type: application/json" --request POST --data '{"name":"New Café","description":"Description","type":"CAFE","campus":"ALTSTADT","street":"Hauptstraße","houseNumber":"100","postalCode":69117,"city":"Heidelberg"}' http://localhost:8080/api/pos
+curl.exe --header "Content-Type: application/json" --request POST --data '{"name":"New Café","description":"Description","type":"CAFE","campus":"ALTSTADT","street":"Hauptstraße","houseNumber":"100","postalCode":69117,"city":"Heidelberg"}' http://localhost:8080/api/pos
 ```
 
 Create a POS based on an OpenStreetMap node:
 
 ```shell
-curl --request POST http://localhost:8080/api/pos/import/osm/5589879349 # set a valid OSM node ID here
+curl.exe --request POST http://localhost:8080/api/pos/import/osm/5589879349 # set a valid OSM node ID here
 ```
 
 #### Update POS
 
 Update title and description:
 ```shell
-curl --header "Content-Type: application/json" --request PUT --data '{"id":4,"name":"New coffee","description":"Great croissants","type":"CAFE","campus":"ALTSTADT","street":"Hauptstraße","houseNumber":"95","postalCode":69117,"city":"Heidelberg"}' http://localhost:8080/api/pos/4 # set correct POS id here and in the body
+curl.exe --header "Content-Type: application/json" --request PUT --data '{"id":4,"name":"New coffee","description":"Great croissants","type":"CAFE","campus":"ALTSTADT","street":"Hauptstraße","houseNumber":"95","postalCode":69117,"city":"Heidelberg"}' http://localhost:8080/api/pos/4 # set correct POS id here and in the body
 ```

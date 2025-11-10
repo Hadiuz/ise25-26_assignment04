@@ -4,7 +4,6 @@ import de.seuhd.campuscoffee.domain.exceptions.DuplicatePosNameException;
 import de.seuhd.campuscoffee.domain.exceptions.OsmNodeMissingFieldsException;
 import de.seuhd.campuscoffee.domain.exceptions.OsmNodeNotFoundException;
 import de.seuhd.campuscoffee.domain.model.CampusType;
-import de.seuhd.campuscoffee.domain.model.OsmNode;
 import de.seuhd.campuscoffee.domain.model.Pos;
 import de.seuhd.campuscoffee.domain.exceptions.PosNotFoundException;
 import de.seuhd.campuscoffee.domain.model.PosType;
@@ -14,7 +13,10 @@ import de.seuhd.campuscoffee.domain.ports.PosService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jspecify.annotations.NonNull;
+import org.json.JSONArray;
+import org.json.JSONObject;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestTemplate;
 
 import java.util.List;
 import java.util.Objects;
@@ -67,36 +69,100 @@ public class PosServiceImpl implements PosService {
     @Override
     public @NonNull Pos importFromOsmNode(@NonNull Long nodeId) throws OsmNodeNotFoundException {
         log.info("Importing POS from OpenStreetMap node {}...", nodeId);
+        RestTemplate restTemplate = new RestTemplate();
+        String url = "https://api.openstreetmap.org/api/0.6/node/" + nodeId + ".json";
+        String jsonResponse;
+        try {
+            jsonResponse = restTemplate.getForObject(url, String.class);
+        } catch (Exception e) {
+            throw new OsmNodeNotFoundException(nodeId);
+        }
 
-        // Fetch the OSM node data using the port
-        OsmNode osmNode = osmDataService.fetchNode(nodeId);
+        if (jsonResponse == null) {
+            throw new OsmNodeNotFoundException(nodeId);
+        }
 
-        // Convert OSM node to POS domain object and upsert it
-        // TODO: Implement the actual conversion (the response is currently hard-coded).
-        Pos savedPos = upsert(convertOsmNodeToPos(osmNode));
-        log.info("Successfully imported POS '{}' from OSM node {}", savedPos.name(), nodeId);
+        try {
+            JSONObject responseJson = new JSONObject(jsonResponse);
+            JSONArray elements = responseJson.getJSONArray("elements");
 
-        return savedPos;
-    }
+            if (elements.length() == 0) {
+                throw new OsmNodeNotFoundException(nodeId);
+            }
 
-    /**
-     * Converts an OSM node to a POS domain object.
-     * Note: This is a stub implementation and should be replaced with real mapping logic.
-     */
-    private @NonNull Pos convertOsmNodeToPos(@NonNull OsmNode osmNode) {
-        if (osmNode.nodeId().equals(5589879349L)) {
-            return Pos.builder()
-                    .name("Rada Coffee & Rösterei")
-                    .description("Caffé und Rösterei")
-                    .type(PosType.CAFE)
-                    .campus(CampusType.ALTSTADT)
-                    .street("Untere Straße")
-                    .houseNumber("21")
-                    .postalCode(69117)
-                    .city("Heidelberg")
-                    .build();
-        } else {
-            throw new OsmNodeMissingFieldsException(osmNode.nodeId());
+            JSONObject nodeElement = elements.getJSONObject(0);
+            JSONObject tags = nodeElement.optJSONObject("tags");
+
+            if (tags == null) {
+                throw new OsmNodeMissingFieldsException(nodeId);
+            }
+
+            String name = tags.optString("name", null);
+            if (name == null) {
+                throw new OsmNodeMissingFieldsException(nodeId);
+            }
+
+            String description = tags.optString("description", "N/A");
+            String street = tags.optString("addr:street", "Unknown");
+            String houseNumber = tags.optString("addr:housenumber", "N/A");
+            if(houseNumber.equals("N/A"))houseNumber = "0";
+            String city = tags.optString("addr:city", "Unknown");
+            String postcode = tags.optString("addr:postcode", "0");
+
+            String amenity = tags.optString("amenity", "Unknown");
+            String shop = tags.optString("shop", "Unknown");
+            String typeString = amenity.equals("Unknown") ? shop : amenity;
+
+            PosType type = PosType.UNKNOWN;
+            switch (typeString){
+                case "cafe":
+                    type = PosType.CAFE;
+                    break;
+                case "vending_machine":
+                    type = PosType.VENDING_MACHINE;
+                    break;
+                case "bakery":
+                    type = PosType.BAKERY;
+                    break;
+            }
+
+            CampusType campusType = CampusType.UNKNOWN;
+            switch (postcode){
+                case "69117":
+                    campusType = CampusType.ALTSTADT;
+                    break;
+                case "69115":
+                    campusType = CampusType.BERGHEIM;
+                    break;
+                case  "69120":
+                    campusType = CampusType.INF;
+                    break;
+            }
+
+            Pos.PosBuilder posBuilder = Pos.builder()
+                    .name(name)
+                    .description(description)
+                    .type(type)
+                    .campus(campusType)
+                    .street(street)
+                    .houseNumber(houseNumber)
+                    .city(city);
+
+            try {
+                posBuilder.postalCode(Integer.parseInt(postcode));
+            } catch (NumberFormatException e) {
+                log.warn("Could not parse postcode '{}' for OSM node {}. Using default 0.", postcode, nodeId);
+                posBuilder.postalCode(0);
+            }
+
+            Pos pos = posBuilder.build();
+            Pos savedPos = this.upsert(pos);
+            log.info("Successfully imported POS '{}' from OSM node {}", savedPos.name(), nodeId);
+            return savedPos;
+
+        } catch (Exception e) {
+            log.error("Failed to parse OSM node data for node ID: {}", nodeId, e);
+            throw new OsmNodeMissingFieldsException(nodeId);
         }
     }
 
@@ -119,4 +185,5 @@ public class PosServiceImpl implements PosService {
             throw e;
         }
     }
+
 }
